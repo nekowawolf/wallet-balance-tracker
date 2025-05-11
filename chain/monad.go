@@ -8,11 +8,14 @@ import (
 	"os"
 	"strings"
 	"math"
+	"bufio"
+	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/fatih/color"
 	"github.com/joho/godotenv"
 )
 
@@ -20,6 +23,16 @@ const (
 	RPC_URL_MONAD  = "https://testnet-rpc.monad.xyz"
 	CHAIN_ID_MONAD = 10143
 	MAX_RECIPIENTS = 50
+	DELAY_SECONDS  = 2
+)
+
+var (
+	cyan    = color.New(color.FgCyan).SprintFunc()
+	yellow  = color.New(color.FgYellow).SprintFunc()
+	green   = color.New(color.FgGreen).SprintFunc()
+	red     = color.New(color.FgRed).SprintFunc()
+	magenta = color.New(color.FgMagenta).SprintFunc()
+	blue    = color.New(color.FgBlue).SprintFunc()
 )
 
 const erc20ABI = `[
@@ -47,6 +60,36 @@ func loadMonadClient() (*ethclient.Client, error) {
 	return client, nil
 }
 
+func Monad() {
+	fmt.Println("\n" + cyan("Check token:"))
+	fmt.Println(green("1. Native (MON)"))
+	fmt.Println(green("2. Input token address manually"))
+	fmt.Print(cyan("Enter your choice: "))
+
+	reader := bufio.NewReader(os.Stdin)
+	tokenChoice, _ := reader.ReadString('\n')
+	tokenChoice = strings.TrimSpace(tokenChoice)
+
+	switch tokenChoice {
+	case "1":
+		fmt.Println("\n" + yellow("Checking native balances for all configured addresses..."))
+		CheckMonadNativeBalances()
+	case "2":
+		fmt.Print("\n" + cyan("Enter token contract address to check: "))
+		tokenAddress, _ := reader.ReadString('\n')
+		tokenAddress = strings.TrimSpace(tokenAddress)
+		if tokenAddress != "" {
+			CheckCustomTokenBalances(tokenAddress)
+		} else {
+			fmt.Println(red("Token address cannot be empty."))
+			os.Exit(1)
+		}
+	default:
+		fmt.Println(red("Invalid choice"))
+		os.Exit(1)
+	}
+}
+
 func getaddress() []common.Address {
 	var address []common.Address
 	for i := 1; i <= MAX_RECIPIENTS; i++ {
@@ -63,80 +106,88 @@ func getaddress() []common.Address {
 
 func CheckMonadNativeBalances() {
 	if err := godotenv.Load(); err != nil {
-		log.Fatalf("Error loading .env file: %v", err)
+		log.Fatalf(red("Error loading .env file: %v"), err)
 	}
 
 	client, err := loadMonadClient()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(red(err))
 	}
 	defer client.Close()
 
 	address := getaddress()
 	if len(address) == 0 {
-		log.Fatal("No valid address found in .env")
+		log.Fatal(red("No valid address found in .env"))
 	}
 
 	for i, addr := range address {
 		balance, err := client.BalanceAt(context.Background(), addr, nil)
 		if err != nil {
-			log.Printf("Error checking balance for address %s: %v", addr.Hex(), err)
+			log.Printf(red("Error checking balance for address %s: %v"), addr.Hex(), err)
 			continue
 		}
 
-		fmt.Printf("\n[Wallet #%d]: %s\n", i+1, addr.Hex())
-		fmt.Printf("Balance: %.4f MON\n", weiToDecimal(balance, 18))
-		fmt.Println("──────────────────────────────────────────────")
+		fmt.Printf("\n%s #%d: %s\n", cyan("[Wallet]"), i+1, addr.Hex())
+		fmt.Printf("%s: %s MON\n", magenta("Balance"), green(fmt.Sprintf("%.4f", weiToDecimal(balance, 18))))
+		fmt.Println("\n▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔")
+
+		if i < len(address)-1 {
+			time.Sleep(DELAY_SECONDS * time.Second)
+		}
 	}
 
-	fmt.Println("\n✅ CHECKED ADDRESS SUCCESS")
+	fmt.Println(green("\n✅ CHECKED ADDRESS SUCCESS"))
 	fmt.Println("\nFollow X : 0xNekowawolf\n")
 }
 
 func CheckCustomTokenBalances(tokenAddress string) {
 	if !common.IsHexAddress(tokenAddress) {
-		log.Fatal("Invalid token contract address format")
+		log.Fatal(red("Invalid token contract address format"))
 	}
 
 	if err := godotenv.Load(); err != nil {
-		log.Fatalf("Error loading .env file: %v", err)
+		log.Fatalf(red("Error loading .env file: %v"), err)
 	}
 
 	client, err := loadMonadClient()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(red(err))
 	}
 	defer client.Close()
 
 	parsedABI, err := abi.JSON(strings.NewReader(erc20ABI))
 	if err != nil {
-		log.Fatalf("Failed to parse ABI: %v", err)
+		log.Fatalf(red("Failed to parse ABI: %v"), err)
 	}
 
 	tokenName, err := getTokenName(client, common.HexToAddress(tokenAddress), parsedABI)
 	if err != nil {
-		log.Printf("Warning: Could not get token name (%v), using contract address instead", err)
+		log.Printf(yellow("Warning: Could not get token name (%v), using contract address instead"), err)
 		tokenName = tokenAddress
 	}
 
 	address := getaddress()
 	if len(address) == 0 {
-		log.Fatal("No valid address found in .env")
+		log.Fatal(red("No valid address found in .env"))
 	}
 
 	for i, addr := range address {
 		balance, err := getTokenBalance(client, common.HexToAddress(tokenAddress), addr, parsedABI)
 		if err != nil {
-			log.Printf("Error checking token balance for address %s: %v", addr.Hex(), err)
+			log.Printf(red("Error checking token balance for address %s: %v"), addr.Hex(), err)
 			continue
 		}
 
-		fmt.Printf("\n[Wallet #%d]: %s\n", i+1, addr.Hex())
-		fmt.Printf("Balance: %.4f %s\n", weiToDecimal(balance, 18), tokenName)
-		fmt.Println("──────────────────────────────────────────────")
+		fmt.Printf("\n%s #%d: %s\n", cyan("[Wallet]"), i+1, addr.Hex())
+		fmt.Printf("%s: %s %s\n", magenta("Balance"), green(fmt.Sprintf("%.4f", weiToDecimal(balance, 18))), tokenName)
+		fmt.Println("\n▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔")
+
+		if i < len(address)-1 {
+			time.Sleep(DELAY_SECONDS * time.Second)
+		}
 	}
 
-	fmt.Println("\n✅ CHECKED ADDRESS SUCCESS")
+	fmt.Println(green("\n✅ CHECKED ADDRESS SUCCESS"))
 	fmt.Println("\nFollow X : 0xNekowawolf\n")
 }
 
