@@ -18,32 +18,11 @@ func main() {
 	choice, _ := reader.ReadString('\n')
 	choice = strings.TrimSpace(choice)
 
-	if choice != "1" {
-		fmt.Println("Invalid choice. Currently only Monad is supported.")
-		os.Exit(1)
-	}
-
-	fmt.Println("\nCheck token:")
-	fmt.Println("1. Native (MON)")
-	fmt.Println("2. Input token address manually")
-	fmt.Print("Enter your choice: ")
-
-	tokenChoice, _ := reader.ReadString('\n')
-	tokenChoice = strings.TrimSpace(tokenChoice)
-
-	switch tokenChoice {
+	switch choice {
 	case "1":
-		fmt.Println("\nChecking native balances for all configured addresses...")
-		chain.CheckMonadNativeBalances()
-	case "2":
-		fmt.Print("\nEnter token contract address to check: ")
-		tokenAddress, _ := reader.ReadString('\n')
-		tokenAddress = strings.TrimSpace(tokenAddress)
-		if tokenAddress != "" {
-			chain.CheckCustomTokenBalances(tokenAddress)
-		}
+		chain.Monad()
 	default:
-		fmt.Println("Invalid choice")
+		fmt.Println("Invalid choice. Please select a valid option.")
 		os.Exit(1)
 	}
 }
